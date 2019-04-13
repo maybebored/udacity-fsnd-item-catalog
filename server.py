@@ -1,9 +1,9 @@
-from flask import Flask, jsonify, render_template, request, redirect, jsonify,
+from flask import Flask, jsonify, render_template, request, redirect, jsonify
 from flask import url_for, flash, make_response
 from flask import session as login_session
 from sqlalchemy import create_engine, asc
 from sqlalchemy.orm import sessionmaker
-from database_setup import Base, Product
+from database_setup import Base, Product, User
 from datetime import datetime, date
 import random
 import string
@@ -104,6 +104,14 @@ def gconnect():
         response.headers['Content-Type'] = 'application/json'
         return response
 
+    # Check if logged in user is stored in db, if not store
+    try:
+        users_query = session.query(User).filter(User.id == gplus_id).one()
+    except sqlalchemy.orm.exc.NoResultFound:
+        newUser = User(id=gplus_id)
+        session.add(newUser)
+        session.commit()
+
     # Check if logging in user is saved in session.
     stored_access_token = login_session.get('access_token')
     stored_gplus_id = login_session.get('gplus_id')
@@ -123,10 +131,10 @@ def gconnect():
     answer = requests.get(userinfo_url, params=params)
     data = answer.json()
 
-    login_session['username'] = data['name']
+    login_session['username'], newUser.username = data['name']
     login_session['picture'] = data['picture']
     login_session['email'] = data['email']
-
+    output = jsonify(user=login_session)
     return output
 
     # Revoke access when user signs out by redirecting to this route
@@ -142,8 +150,8 @@ def gconnect():
                                      401)
             response.headers['Content-Type'] = 'application/json'
             return response
-        url = 'https://accounts.google.com/o/oauth2/'+
-        'revoke?token=%s' % login_session['access_token']
+        url = 'https://accounts.google.com/o/oauth2/'
+        url += 'revoke?token=%s' % login_session['access_token']
         h = httplib2.Http()
         result = h.request(url, 'GET')[0]
         print 'result is '
@@ -166,7 +174,6 @@ def gconnect():
             return response
 
     # Display main page
-    @app.route('/')
     @app.route('/home/')  # home page
     def catalogMain():
         user = getLoggedInUser()
@@ -286,6 +293,6 @@ def getProductJSON(product_id):
     return jsonify(product=products_query.serialize)
 
 if __name__ == '__main__':
-    app.secret_key = 'secret_key_mayuran_product'
+    app.secret_key = 'secret_key'
     app.debug = True
     app.run(host='0.0.0.0', port=5000)

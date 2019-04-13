@@ -7,6 +7,13 @@ from datetime import datetime
 Base = declarative_base()
 
 
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(String(250), nullable=False, primary_key=True)
+    username = Column(String(250))
+
+
 class Product(Base):
     __tablename__ = 'products'
 
@@ -15,7 +22,8 @@ class Product(Base):
     description = Column(String(250), nullable=False)
     category = Column(String(250), nullable=False)
     created_on = Column(Date, nullable=False)
-    user_id = Column(String(250))
+    user = relationship(User)
+    user_id = Column(String(250), ForeignKey('users.id'))
 
     @property
     def serialize(self):
