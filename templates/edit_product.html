@@ -7,9 +7,9 @@
     <form action="#" method="post">
         <div class="form-group">
             <label for="title">Title:</label>
-            <input type="text" class="form-control" maxlength="100" name="title" value="{{ product.title }}">
+            <input type="text" class="form-control" maxlength="100" name="title" value="{{ product.title }}" required>
             <label for="description">Description:</label>
-            <input type="text" class="form-control" maxlength="100" name="description" value="{{ product.description }}">
+            <input type="text" class="form-control" maxlength="100" name="description" value="{{ product.description }}" required>
             <button type="submit" class="btn btn-primary mt-2" id="submit">
                 Submit
             </button>
