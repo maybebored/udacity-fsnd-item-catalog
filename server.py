@@ -3,6 +3,7 @@ from flask import url_for, flash, make_response
 from flask import session as login_session
 from sqlalchemy import create_engine, asc
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm.exc import NoResultFound
 from database_setup import Base, Product, User
 from datetime import datetime, date
 import random
@@ -52,6 +53,7 @@ def showLogin():
 # Receive auth_code by HTTPS POST
 @app.route('/gconnect', methods=['POST'])
 def gconnect():
+    newUser = None;
     # If this request does not have `X-Requested-With` header,
     # this could be a CSRF
     if not request.headers.get('X-Requested-With'):
@@ -100,14 +102,14 @@ def gconnect():
     if result['issued_to'] != CLIENT_ID:
         response = make_response(
             json.dumps("Token's client ID does not match app's."), 401)
-        print "Token's client ID does not match app's."
+        print ("Token's client ID does not match app's.")
         response.headers['Content-Type'] = 'application/json'
         return response
 
     # Check if logged in user is stored in db, if not store
     try:
         users_query = session.query(User).filter(User.id == gplus_id).one()
-    except sqlalchemy.orm.exc.NoResultFound:
+    except NoResultFound:
         newUser = User(id=gplus_id)
         session.add(newUser)
         session.commit()
@@ -131,84 +133,84 @@ def gconnect():
     answer = requests.get(userinfo_url, params=params)
     data = answer.json()
 
-    login_session['username'], newUser.username = data['name']
+    login_session['username'] = data['name']
     login_session['picture'] = data['picture']
     login_session['email'] = data['email']
-    output = jsonify(user=login_session)
+    output = 'Success'
     return output
 
-    # Revoke access when user signs out by redirecting to this route
-    @app.route('/gdisconnect')
-    def gdisconnect():
-        access_token = login_session['access_token']
-        print 'In gdisconnect access token is %s', access_token
-        print 'User name is: '
-        print login_session['username']
-        if access_token is None:
-            print 'Access Token is None'
-            response = make_response(json.dumps('Current user not connected.'),
-                                     401)
-            response.headers['Content-Type'] = 'application/json'
-            return response
-        url = 'https://accounts.google.com/o/oauth2/'
-        url += 'revoke?token=%s' % login_session['access_token']
-        h = httplib2.Http()
-        result = h.request(url, 'GET')[0]
-        print 'result is '
-        print result
-        if result['status'] == '200':
-            del login_session['access_token']
-            del login_session['gplus_id']
-            del login_session['username']
-            del login_session['email']
-            del login_session['picture']
-            response = make_response(json.dumps('Successfully disconnected.'),
-                                     200)
-            response.headers['Content-Type'] = 'application/json'
-            return redirect('/')
-        else:
+# Revoke access when user signs out by redirecting to this route
+@app.route('/gdisconnect')
+def gdisconnect():
+    access_token = login_session['access_token']
+    print ('In gdisconnect access token is %s', access_token)
+    print ('User name is: ')
+    print (login_session['username'])
+    if access_token is None:
+        print ('Access Token is None')
+        response = make_response(json.dumps('Current user not connected.'),
+                                    401)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+    url = 'https://accounts.google.com/o/oauth2/'
+    url += 'revoke?token=%s' % login_session['access_token']
+    h = httplib2.Http()
+    result = h.request(url, 'GET')[0]
+    print ('result is ')
+    print (result)
+    if result['status'] == '200':
+        del login_session['access_token']
+        del login_session['gplus_id']
+        del login_session['username']
+        del login_session['email']
+        del login_session['picture']
+        response = make_response(json.dumps('Successfully disconnected.'),
+                                    200)
+        response.headers['Content-Type'] = 'application/json'
+        return redirect('/')
+    else:
 
-            response = make_response(json.dumps(
-                'Failed to revoke token for given user.', 400))
-            response.headers['Content-Type'] = 'application/json'
-            return response
+        response = make_response(json.dumps(
+            'Failed to revoke token for given user.', 400))
+        response.headers['Content-Type'] = 'application/json'
+        return response
 
-    # Display main page
-    @app.route('/home/')  # home page
-    def catalogMain():
-        user = getLoggedInUser()
-        products_query = session.query(Product).filter(
-            Product.created_on > date(2019, 1, 1))
-        categories_query = session.query(
-            Product.category.distinct().label("category"))
-        categories = [row.category for row in categories_query.all()]
-        return render_template('home.html', products=products_query,
-                               categories=categories, user=user)
-
-    # Display category page
-    @app.route('/catalog/<string:category>/')
-    def getProductsByCategory(category):
-        user = getLoggedInUser()
+# Display main page
+@app.route('/')
+@app.route('/home/')  # home page
+def catalogMain():
+    user = getLoggedInUser()
+    products_query = session.query(Product).filter(
+        Product.created_on > date(2019, 1, 1))
     categories_query = session.query(
         Product.category.distinct().label("category"))
     categories = [row.category for row in categories_query.all()]
-    products_query = session.query(Product).filter(
-        Product.category == category)
-    return render_template('category.html', products=products_query,
-                           categories=categories, user=user)
+    return render_template('home.html', products=products_query,
+                            categories=categories, user=user)
 
-    # Get a product by ID
-    @app.route('/catalog/product/<int:product_id>/')
-    def getProduct(product_id):
-        user = getLoggedInUser()
+# Display category page
+@app.route('/catalog/<string:category>/')
+def getProductsByCategory(category):
+    user = getLoggedInUser()
+    categories_query = session.query(
+        Product.category.distinct().label("category"))
+    categories = [row.category for row in categories_query.all()]
+    products_query = session.query(Product).filter(Product.category == category)
+    return render_template('category.html', products=products_query,
+                        categories=categories, user=user)
+
+# Get a product by ID
+@app.route('/catalog/product/<int:product_id>/')
+def getProduct(product_id):
+    user = getLoggedInUser()
     products_query = session.query(Product).filter(
-        Product.id == product_id).one()
+    Product.id == product_id).one()
     return render_template('product.html', product=products_query, user=user)
 
-    # Add new product
-    @app.route('/catalog/product/new/', methods=['GET', 'POST'])
-    def newProduct():
-        user = getLoggedInUser()
+# Add new product
+@app.route('/catalog/product/new/', methods=['GET', 'POST'])
+def newProduct():
+    user = getLoggedInUser()
     if not user:
         return redirect('/login')
     categories_query = session.query(
@@ -217,27 +219,27 @@ def gconnect():
     if request.method == 'POST':
         params = request.form
         newProduct = Product(title=params['title'],
-                             description=params['description'],
-                             category=params['category'],
-                             created_on=datetime.now(),
-                             user_id=login_session['username'])
+                                description=params['description'],
+                                category=params['category'],
+                                created_on=datetime.now(),
+                                user_id=login_session['username'])
         session.add(newProduct)
         session.commit()
         return redirect(url_for('catalogMain'))
     else:
         return render_template('new_product.html',
-                               categories=categories, user=user)
+                            categories=categories, user=user)
 
-    # Delete an existing product
-    @app.route('/catalog/<int:product_id>/delete/', methods=['GET', 'POST'])
-    def deleteProduct(product_id):
-        user = getLoggedInUser()
+# Delete an existing product
+@app.route('/catalog/<int:product_id>/delete/', methods=['GET', 'POST'])
+def deleteProduct(product_id):
+    user = getLoggedInUser()
     if not user:
         return redirect('/login')
     productToDelete = session.query(
         Product).filter_by(id=product_id).one()
     if (productToDelete.user_id is None) or (productToDelete.user_id !=
-                                             login_session['username']):
+                                            login_session['username']):
         return alertError("You are not authorised to delete this product")
     if request.method == 'POST':
         session.delete(productToDelete)
@@ -245,7 +247,7 @@ def gconnect():
         return redirect(url_for('catalogMain'))
     else:
         return render_template('delete_product.html', product=productToDelete,
-                               user=user)
+                            user=user)
 
 
 # Edit an existing product
